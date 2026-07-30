@@ -1,4 +1,4 @@
-name: Build and Deploy FastAPI
+name: Build and Deploy FastAPI (Prebuilt Artifact)
 
 on:
   push:
@@ -10,7 +10,8 @@ env:
   AZURE_WEBAPP_NAME: test-dpr-fastapi
 
 jobs:
-  deploy:
+  build-and-deploy:
+
     runs-on: ubuntu-latest
 
     steps:
@@ -23,30 +24,30 @@ jobs:
         run: |
           uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Create Production Virtual Environment
+      - name: Install dependencies
         run: |
-          uv venv antenv
-
-          source antenv/bin/activate
-
           uv sync --no-dev
 
-      - name: Verify Installation
+      - name: Verify
         run: |
-          source antenv/bin/activate
+          .venv/bin/python -c "import fastapi"
+          .venv/bin/python -c "import uvicorn"
+          .venv/bin/python -c "import pydantic_core"
 
-          python --version
-
-          which python
-
-          python -c "import fastapi"
-          python -c "import uvicorn"
-          python -c "import pydantic_core"
-
-      - name: Remove cache
+      - name: Build deployment folder
         run: |
-          rm -rf .venv
-          rm -rf ~/.cache/uv
+          mkdir deploy
+
+          cp -r app deploy/
+          cp pyproject.toml deploy/
+          cp uv.lock deploy/
+
+          cp -r .venv deploy/antenv
+
+      - name: Zip artifact
+        run: |
+          cd deploy
+          zip -r ../release.zip .
 
       - name: Azure Login
         uses: azure/login@v2
@@ -57,5 +58,5 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          package: .
-          startup-command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+          package: release.zip
+          startup-command: /home/site/wwwroot/antenv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
