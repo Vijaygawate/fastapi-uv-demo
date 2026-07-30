@@ -11,25 +11,32 @@ env:
 
 jobs:
   build-and-deploy:
-
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
-      - name: Install Python
-        run: |
-          uv python install ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
+      - name: Sync production dependencies
         run: |
           uv sync --no-dev
 
+      - name: Verify application
+        run: |
+          .venv/bin/python --version
+          .venv/bin/python -c "from app.main import app; print('Application imports successfully')"
 
-      - name: Build deployment folder
+      - name: Prepare deployment artifact
         run: |
           mkdir deploy
 
@@ -37,9 +44,10 @@ jobs:
           cp pyproject.toml deploy/
           cp uv.lock deploy/
 
+          # Azure App Service expects this name
           cp -r .venv deploy/antenv
 
-      - name: Zip artifact
+      - name: Create ZIP package
         run: |
           cd deploy
           zip -r ../release.zip .
@@ -49,9 +57,9 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy
+      - name: Deploy to Azure Web App
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           package: release.zip
-          startup-command: /home/site/wwwroot/antenv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+          startup-command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
