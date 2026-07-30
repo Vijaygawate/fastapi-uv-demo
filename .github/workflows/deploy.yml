@@ -1,4 +1,4 @@
-name: Build and Deploy FastAPI to Azure App Service
+name: Build and Deploy FastAPI
 
 on:
   push:
@@ -6,19 +6,15 @@ on:
       - main
 
 env:
-  PYTHON_VERSION: "3.11"          # Match App Service runtime
+  PYTHON_VERSION: "3.11"
   AZURE_WEBAPP_NAME: test-dpr-fastapi
-  PACKAGE_PATH: .
-  STARTUP_COMMAND: python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
 
 jobs:
-  build-and-deploy:
-
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -27,38 +23,39 @@ jobs:
         run: |
           uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Export dependencies
+      - name: Create Production Virtual Environment
         run: |
-          uv export \
-            --format requirements-txt \
-            --no-dev \
-            --output-file requirements.txt
+          uv venv antenv
 
-      - name: Install production dependencies
+          source antenv/bin/activate
+
+          uv sync --no-dev
+
+      - name: Verify Installation
         run: |
-          mkdir -p .python_packages/lib/site-packages
+          source antenv/bin/activate
 
-          uv pip install \
-            --python $(uv python find ${{ env.PYTHON_VERSION }}) \
-            --requirements requirements.txt \
-            --target .python_packages/lib/site-packages
+          python --version
 
-      - name: Verify packages
+          which python
+
+          python -c "import fastapi"
+          python -c "import uvicorn"
+          python -c "import pydantic_core"
+
+      - name: Remove cache
         run: |
-          PYTHONPATH=.python_packages/lib/site-packages \
-          python3 -c "import fastapi,uvicorn; print('Dependencies OK')"
-
-      - name: Remove temporary requirements
-        run: rm requirements.txt
+          rm -rf .venv
+          rm -rf ~/.cache/uv
 
       - name: Azure Login
         uses: azure/login@v2
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy to Azure App Service
+      - name: Deploy
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          package: ${{ env.PACKAGE_PATH }}
-          startup-command: ${{ env.STARTUP_COMMAND }}
+          package: .
+          startup-command: python3 -m uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
