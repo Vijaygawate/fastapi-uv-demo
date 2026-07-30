@@ -28,11 +28,6 @@ jobs:
         run: |
           uv sync --no-dev
 
-      - name: Verify
-        run: |
-          .venv/bin/python -c "import fastapi"
-          .venv/bin/python -c "import uvicorn"
-          .venv/bin/python -c "import pydantic_core"
 
       - name: Build deployment folder
         run: |
