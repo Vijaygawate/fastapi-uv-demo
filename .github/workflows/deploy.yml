@@ -46,11 +46,6 @@ jobs:
             --requirements requirements.txt \
             --target .python_packages/lib/site-packages
 
-      # Optional
-      - name: Run Tests
-        run: |
-          uv run pytest
-        continue-on-error: true
 
       - name: Remove Temporary Requirements
         run: |
